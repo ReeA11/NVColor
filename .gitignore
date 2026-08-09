@@ -1,0 +1,60 @@
+# Virtual env / Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist_pkg/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+*.exe
+*.dll
+*.manifest
+*.toc
+*.pkg
+*.pyz
+*.pyzw
+warn-*.txt
+xref-*.html
+
+# Local runtime config (personal presets / hotkeys / watch list)
+config.json
+config.local.json
+*.local.json
+
+# Secrets / env (future-proof)
+.env
+.env.*
+!.env.example
+
+# Logs / local state
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Large / intermediate generated assets (keep nvcolor.png + nvcolor.ico)
+assets/*-app-icon.png
+assets/reeall-*.png
+
+# OS junk
+$RECYCLE.BIN/

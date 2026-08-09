@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Menu</title>
+  <link rel="stylesheet" href="tray_menu.css" />
+</head>
+<body>
+  <div class="menu" id="menu" role="menu">
+    <button type="button" class="item accent" data-action="settings" data-i18n="settings" role="menuitem">Settings</button>
+    <div class="sep"></div>
+    <div id="presets" class="presets"></div>
+    <div class="sep"></div>
+    <button type="button" class="item" data-action="reset" data-i18n="hardReset" role="menuitem">Hard reset</button>
+    <button type="button" class="item" data-action="folder" data-i18n="configFolder" role="menuitem">Config folder</button>
+    <button type="button" class="item danger" data-action="quit" data-i18n="quit" role="menuitem">Quit</button>
+  </div>
+  <script src="tray_menu.js"></script>
+</body>
+</html>
