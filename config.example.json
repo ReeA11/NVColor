@@ -6,10 +6,8 @@
   "ui_language": "en",
   "watch": {
     "enabled": false,
-    "process_names": [],
-    "preset": "Default",
-    "on_exit_preset": "Default",
-    "poll_ms": 1500
+    "poll_ms": 1500,
+    "rules": []
   },
   "hotkeys": {},
   "presets": {

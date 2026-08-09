@@ -7,7 +7,14 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from config_store import config_path, load_config, read_config_file, save_config, write_config_file
+from config_store import (
+    config_path,
+    load_config,
+    normalize_watch_rule,
+    read_config_file,
+    save_config,
+    write_config_file,
+)
 from gamma_control import ColorPreset, apply_preset
 from gamma_control import hard_reset as apply_hard_reset
 from hotkeys import HotkeyListener, format_hotkey, parse_hotkey
@@ -226,6 +233,18 @@ class AppController:
         self._notify(f"Saved preset '{name}'")
         self._emit()
 
+    def _retarget_watch_presets(self, old: str, new: str) -> None:
+        rules = self.watch.get("rules")
+        if not isinstance(rules, list):
+            return
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            if rule.get("on_start") == old:
+                rule["on_start"] = new
+            if rule.get("on_exit") == old:
+                rule["on_exit"] = new
+
     def save_preset_with_hotkey(
         self,
         name: str,
@@ -262,10 +281,7 @@ class AppController:
                     self.presets[name] = self.presets.pop(old_name)
                     if old_name in self.hotkey_map:
                         self.hotkey_map[name] = self.hotkey_map.pop(old_name)
-                    if self.watch.get("preset") == old_name:
-                        self.watch["preset"] = name
-                    if self.watch.get("on_exit_preset") == old_name:
-                        self.watch["on_exit_preset"] = name
+                    self._retarget_watch_presets(old_name, name)
                     if self.current == old_name:
                         self.current = name
 
@@ -307,10 +323,7 @@ class AppController:
         with self._lock:
             self.presets.pop(name, None)
             self.hotkey_map.pop(name, None)
-            if self.watch.get("preset") == name:
-                self.watch["preset"] = "Default"
-            if self.watch.get("on_exit_preset") == name:
-                self.watch["on_exit_preset"] = "Default"
+            self._retarget_watch_presets(name, "Default")
             save_config(self.cfg)
         self._restart_hotkeys()
         self._notify(f"Deleted preset '{name}'")
@@ -330,10 +343,7 @@ class AppController:
             self.presets[new] = self.presets.pop(old)
             if old in self.hotkey_map:
                 self.hotkey_map[new] = self.hotkey_map.pop(old)
-            if self.watch.get("preset") == old:
-                self.watch["preset"] = new
-            if self.watch.get("on_exit_preset") == old:
-                self.watch["on_exit_preset"] = new
+            self._retarget_watch_presets(old, new)
             if self.current == old:
                 self.current = new
             save_config(self.cfg)
@@ -360,29 +370,79 @@ class AppController:
         self._notify(f"Hotkey {spec or '(none)'} -> {preset}")
         self._emit()
 
-    def update_watch(
+    def set_watch_config(
         self,
         *,
-        enabled: bool | None = None,
-        process_names: list[str] | None = None,
-        preset: str | None = None,
-        on_exit_preset: str | None = None,
+        enabled: bool,
+        rules: list[dict[str, Any]] | None = None,
         poll_ms: int | None = None,
     ) -> None:
         with self._lock:
-            if enabled is not None:
-                self.watch["enabled"] = bool(enabled)
-            if process_names is not None:
-                self.watch["process_names"] = [p.strip() for p in process_names if p.strip()]
-            if preset is not None:
-                self.watch["preset"] = preset
-            if on_exit_preset is not None:
-                self.watch["on_exit_preset"] = on_exit_preset
+            self.watch["enabled"] = bool(enabled)
             if poll_ms is not None:
-                self.watch["poll_ms"] = int(poll_ms)
+                self.watch["poll_ms"] = max(300, int(poll_ms))
+            if rules is not None:
+                cleaned: list[dict[str, Any]] = []
+                preset_names = set(self.presets.keys())
+                for i, raw in enumerate(rules):
+                    if not isinstance(raw, dict):
+                        continue
+                    rule = normalize_watch_rule(
+                        raw, presets=preset_names, fallback_id=f"rule_{i+1}"
+                    )
+                    if rule:
+                        cleaned.append(rule)
+                self.watch["rules"] = cleaned
+            # Drop legacy keys if present
+            self.watch.pop("process_names", None)
+            self.watch.pop("preset", None)
+            self.watch.pop("on_exit_preset", None)
             save_config(self.cfg)
             self._restart_watcher()
         self._emit()
+
+    def update_watch(self, **kwargs: Any) -> None:
+        """Backward-compatible shim — prefer set_watch_config."""
+        enabled = kwargs.get("enabled")
+        poll_ms = kwargs.get("poll_ms")
+        if "process_names" in kwargs or "preset" in kwargs or "on_exit_preset" in kwargs:
+            # Convert legacy single-rule update into rules list
+            with self._lock:
+                rules = list(self.watch.get("rules") or [])
+                if not rules:
+                    rules = [
+                        {
+                            "id": "rule_1",
+                            "name": "App",
+                            "enabled": True,
+                            "process_names": kwargs.get("process_names")
+                            or self.watch.get("process_names")
+                            or [],
+                            "on_start": kwargs.get("preset")
+                            or self.watch.get("preset")
+                            or "Default",
+                            "on_exit": kwargs.get("on_exit_preset")
+                            or self.watch.get("on_exit_preset")
+                            or "Default",
+                        }
+                    ]
+                elif rules:
+                    if kwargs.get("process_names") is not None:
+                        rules[0]["process_names"] = kwargs["process_names"]
+                    if kwargs.get("preset") is not None:
+                        rules[0]["on_start"] = kwargs["preset"]
+                    if kwargs.get("on_exit_preset") is not None:
+                        rules[0]["on_exit"] = kwargs["on_exit_preset"]
+            self.set_watch_config(
+                enabled=bool(enabled) if enabled is not None else bool(self.watch.get("enabled")),
+                rules=rules,
+                poll_ms=poll_ms,
+            )
+            return
+        self.set_watch_config(
+            enabled=bool(enabled) if enabled is not None else bool(self.watch.get("enabled")),
+            poll_ms=poll_ms,
+        )
 
     def set_apply_all_displays(self, value: bool) -> None:
         with self._lock:
@@ -490,24 +550,22 @@ class AppController:
         w = self.watch
         if not w.get("enabled"):
             return
-        names = list(w.get("process_names") or [])
-        if not names:
+        rules = [r for r in (w.get("rules") or []) if isinstance(r, dict)]
+        active = [r for r in rules if r.get("enabled", True) and r.get("process_names")]
+        if not active:
             return
 
-        def on_start() -> None:
-            self.apply_named(str(w.get("preset", "Default")), reason="game started")
-
-        def on_stop() -> None:
-            self.apply_named(str(w.get("on_exit_preset", "Default")), reason="game exited")
+        def on_apply(preset: str, reason: str) -> None:
+            self.apply_named(preset, reason=reason)
 
         self.watcher = ProcessWatcher(
-            process_names=names,
-            on_start=on_start,
-            on_stop=on_stop,
+            rules=active,
+            on_apply=on_apply,
             poll_ms=int(w.get("poll_ms", 1500)),
         )
         self.watcher.start()
-        print(f"[NVColor] Watching: {', '.join(names)}", flush=True)
+        labels = [f"{r.get('name') or r.get('id')}({','.join(r.get('process_names') or [])})" for r in active]
+        print(f"[NVColor] Watching rules: {'; '.join(labels)}", flush=True)
 
     def snapshot_for_ui(self) -> dict[str, Any]:
         with self._lock:

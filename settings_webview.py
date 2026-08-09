@@ -81,16 +81,35 @@ class SettingsApi:
             },
             "current": str(snap.get("current") or "Default"),
             "selected": str(self._selected or "Default"),
-            "watch": {
-                "enabled": bool((snap.get("watch") or {}).get("enabled")),
-                "process_names": list((snap.get("watch") or {}).get("process_names") or []),
-                "preset": str((snap.get("watch") or {}).get("preset") or "Default"),
-                "on_exit_preset": str((snap.get("watch") or {}).get("on_exit_preset") or "Default"),
-                "poll_ms": int((snap.get("watch") or {}).get("poll_ms") or 1500),
-            },
+            "watch": self._watch_for_ui(snap.get("watch") or {}),
             "apply_all_displays": bool(snap.get("apply_all_displays")),
             "notify_on_switch": bool(snap.get("notify_on_switch", True)),
             "ui_language": "ru" if str(snap.get("ui_language") or "en").lower().startswith("ru") else "en",
+        }
+
+    @staticmethod
+    def _watch_for_ui(watch: dict[str, Any]) -> dict[str, Any]:
+        rules_out: list[dict[str, Any]] = []
+        for rule in watch.get("rules") or []:
+            if not isinstance(rule, dict):
+                continue
+            procs = rule.get("process_names") or []
+            if not isinstance(procs, list):
+                procs = []
+            rules_out.append(
+                {
+                    "id": str(rule.get("id") or ""),
+                    "name": str(rule.get("name") or ""),
+                    "enabled": bool(rule.get("enabled", True)),
+                    "process_names": [str(p) for p in procs if isinstance(p, str) and p.strip()],
+                    "on_start": str(rule.get("on_start") or "Default"),
+                    "on_exit": str(rule.get("on_exit") or "Default"),
+                }
+            )
+        return {
+            "enabled": bool(watch.get("enabled")),
+            "poll_ms": int(watch.get("poll_ms") or 1500),
+            "rules": rules_out,
         }
 
     def select_preset(self, name: str) -> dict[str, Any]:
@@ -156,25 +175,28 @@ class SettingsApi:
 
     def new_preset(
         self,
-        brightness: float,
-        contrast: float,
-        gamma: float,
+        brightness: float = 0.5,
+        contrast: float = 0.5,
+        gamma: float = 1.0,
         vibrance: int = 50,
         hue: int = 0,
     ) -> dict[str, Any]:
         try:
+            from config_store import DEFAULT_PRESET
+
             base = "Preset"
             i = 1
             while f"{base}{i}" in self._controller.presets:
                 i += 1
             name = f"{base}{i}"
+            d = DEFAULT_PRESET
             self._controller.save_preset_values(
                 name,
-                float(brightness),
-                float(contrast),
-                float(gamma),
-                int(vibrance),
-                int(hue),
+                float(d["brightness"]),
+                float(d["contrast"]),
+                float(d["gamma"]),
+                int(d["vibrance"]),
+                int(d["hue"]),
             )
             self._selected = name
             return self._ok(name=name)
@@ -191,16 +213,16 @@ class SettingsApi:
 
     def save_options(self, opts: dict[str, Any]) -> dict[str, Any]:
         try:
-            procs_raw = str(opts.get("processes") or "")
-            procs = [p.strip() for p in procs_raw.replace(";", ",").split(",") if p.strip()]
             self._controller.set_apply_all_displays(bool(opts.get("all_displays")))
             if "notify" in opts:
                 self._controller.set_notify(bool(opts.get("notify")))
-            self._controller.update_watch(
+            rules_raw = opts.get("rules")
+            rules = rules_raw if isinstance(rules_raw, list) else []
+            poll_ms = opts.get("poll_ms")
+            self._controller.set_watch_config(
                 enabled=bool(opts.get("watch_enabled")),
-                process_names=procs,
-                preset=str(opts.get("on_start") or "Default"),
-                on_exit_preset=str(opts.get("on_exit") or "Default"),
+                rules=rules,
+                poll_ms=int(poll_ms) if poll_ms is not None else None,
             )
             return self._ok()
         except Exception as exc:
@@ -291,9 +313,9 @@ class SettingsApi:
 
 
 WINDOW_WIDTH = 900
-WINDOW_HEIGHT = 1007
+WINDOW_HEIGHT = 1028
 WINDOW_MIN_WIDTH = 900
-WINDOW_MIN_HEIGHT = 1007
+WINDOW_MIN_HEIGHT = 1028
 
 
 class _RECT(ctypes.Structure):

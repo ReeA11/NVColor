@@ -62,17 +62,42 @@ select {
   gap: 16px;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-logo {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 10px;
+  display: block;
+}
+
+.header-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .header h1 {
   margin: 0;
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 .subtitle {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.3;
 }
 
 .lang-switch {
@@ -252,8 +277,28 @@ select {
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
   padding-right: 4px;
+}
+
+.panel-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-group-global {
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.panel-group-label {
+  padding: 0 2px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .card {
@@ -467,6 +512,54 @@ input[type="text"]:focus {
 .hint .mono {
   font-family: var(--mono);
   color: var(--text2);
+}
+
+.watch-rules-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 4px 0 8px;
+}
+
+.watch-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.watch-rule {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  background: color-mix(in srgb, var(--control) 70%, transparent);
+}
+
+.watch-rule .row {
+  margin-bottom: 8px;
+}
+
+.watch-rule .row:last-child {
+  margin-bottom: 0;
+}
+
+.watch-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.watch-rule-enabled {
+  flex: 1;
+  margin-bottom: 0;
+  padding: 0;
+}
+
+.btn-rule-delete {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 input[type="range"] {

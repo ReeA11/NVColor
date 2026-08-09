@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -28,10 +29,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "ui_language": "en",
     "watch": {
         "enabled": False,
-        "process_names": [],
-        "preset": "Default",
-        "on_exit_preset": "Default",
         "poll_ms": 1500,
+        "rules": [],
     },
     "hotkeys": {},
     "presets": {
@@ -110,6 +109,87 @@ def read_config_file(path: Path) -> dict[str, Any]:
     return normalize_config(data)
 
 
+def _new_rule_id() -> str:
+    return f"rule_{int(time.time() * 1000) % 10_000_000_000}"
+
+
+def normalize_watch_rule(raw: dict[str, Any], *, presets: set[str], fallback_id: str | None = None) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    procs_raw = raw.get("process_names") or []
+    if isinstance(procs_raw, str):
+        procs_raw = [p.strip() for p in procs_raw.replace(";", ",").split(",") if p.strip()]
+    process_names = []
+    if isinstance(procs_raw, list):
+        for p in procs_raw:
+            if isinstance(p, str) and p.strip():
+                process_names.append(p.strip())
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        name = process_names[0] if process_names else "App"
+    on_start = str(raw.get("on_start") or raw.get("preset") or "Default").strip() or "Default"
+    on_exit = str(raw.get("on_exit") or raw.get("on_exit_preset") or "Default").strip() or "Default"
+    if on_start not in presets:
+        on_start = "Default"
+    if on_exit not in presets:
+        on_exit = "Default"
+    rid = str(raw.get("id") or fallback_id or _new_rule_id()).strip() or _new_rule_id()
+    return {
+        "id": rid,
+        "name": name,
+        "enabled": bool(raw.get("enabled", True)),
+        "process_names": process_names,
+        "on_start": on_start,
+        "on_exit": on_exit,
+    }
+
+
+def normalize_watch(watch: dict[str, Any] | None, *, presets: set[str]) -> dict[str, Any]:
+    base = deepcopy(DEFAULT_CONFIG["watch"])
+    if not isinstance(watch, dict):
+        return base
+
+    base["enabled"] = bool(watch.get("enabled", False))
+    try:
+        base["poll_ms"] = max(300, int(watch.get("poll_ms", 1500)))
+    except Exception:
+        base["poll_ms"] = 1500
+
+    rules_out: list[dict[str, Any]] = []
+    raw_rules = watch.get("rules")
+    if isinstance(raw_rules, list):
+        for i, item in enumerate(raw_rules):
+            if not isinstance(item, dict):
+                continue
+            rule = normalize_watch_rule(item, presets=presets, fallback_id=f"rule_{i+1}")
+            if rule:
+                rules_out.append(rule)
+    elif watch.get("process_names"):
+        # Legacy single-watch → one rule
+        legacy = {
+            "id": "rule_legacy",
+            "name": "App",
+            "enabled": True,
+            "process_names": watch.get("process_names") or [],
+            "on_start": watch.get("preset") or "Default",
+            "on_exit": watch.get("on_exit_preset") or "Default",
+        }
+        rule = normalize_watch_rule(legacy, presets=presets, fallback_id="rule_legacy")
+        if rule and rule["process_names"]:
+            rules_out.append(rule)
+
+    # Dedupe ids
+    seen: set[str] = set()
+    for rule in rules_out:
+        rid = rule["id"]
+        if rid in seen:
+            rule["id"] = _new_rule_id()
+        seen.add(rule["id"])
+
+    base["rules"] = rules_out
+    return base
+
+
 def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
     """
     Build runtime config from file data.
@@ -126,10 +206,6 @@ def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
 
     lang = str(cfg.get("ui_language") or "en").lower()
     cfg["ui_language"] = "ru" if lang.startswith("ru") else "en"
-
-    watch = data.get("watch")
-    if isinstance(watch, dict):
-        cfg["watch"] = _merge(deepcopy(DEFAULT_CONFIG["watch"]), watch)
 
     presets = data.get("presets")
     cleaned: dict[str, Any] = {}
@@ -148,11 +224,7 @@ def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
         cleaned["Default"] = dict(DEFAULT_PRESET)
     cfg["presets"] = cleaned
 
-    # Point watch presets at something that exists
-    if cfg["watch"].get("preset") not in cleaned:
-        cfg["watch"]["preset"] = "Default"
-    if cfg["watch"].get("on_exit_preset") not in cleaned:
-        cfg["watch"]["on_exit_preset"] = "Default"
+    cfg["watch"] = normalize_watch(data.get("watch") if isinstance(data.get("watch"), dict) else None, presets=set(cleaned))
 
     hotkeys = data.get("hotkeys")
     if isinstance(hotkeys, dict):
@@ -174,12 +246,3 @@ def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
         cfg["hotkeys"] = {}
 
     return cfg
-
-
-def _merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    for key, value in overlay.items():
-        if isinstance(value, dict) and isinstance(base.get(key), dict):
-            base[key] = _merge(base[key], value)
-        else:
-            base[key] = value
-    return base

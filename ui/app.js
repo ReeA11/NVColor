@@ -23,14 +23,21 @@ const I18N = {
     hue: "Hue",
     savePreset: "Save preset",
     hardReset: "Hard reset",
+    selectedPreset: "Selected preset",
+    appSettings: "App settings",
+    options: "Options",
     automation: "Automation",
-    watchProcess: "Watch game process",
+    watchProcess: "Enable automation",
     allDisplays: "Apply to all displays",
-    processes: "Processes",
+    addRule: "Add",
+    ruleName: "Name",
+    ruleProcesses: "Processes",
     processesPlaceholder: "game.exe, other.exe",
     onStart: "On start",
     onExit: "On exit",
-    processesHint: "Comma-separated process names, e.g. process.exe",
+    ruleEnabled: "Enabled",
+    deleteRule: "Delete",
+    processesHint: "Comma-separated process names per rule, e.g. process.exe",
     config: "Config",
     configHint: 'Import / export full <span class="mono">config.json</span> (presets, hotkeys, automation).',
     import: "Import…",
@@ -70,14 +77,21 @@ const I18N = {
     hue: "Оттенок",
     savePreset: "Сохранить",
     hardReset: "Сброс",
+    selectedPreset: "Выбранный пресет",
+    appSettings: "Настройки приложения",
+    options: "Параметры",
     automation: "Автоматизация",
-    watchProcess: "Следить за процессом",
+    watchProcess: "Включить автоматизацию",
     allDisplays: "На все мониторы",
-    processes: "Процессы",
+    addRule: "Добавить",
+    ruleName: "Имя",
+    ruleProcesses: "Процессы",
     processesPlaceholder: "game.exe, other.exe",
     onStart: "При запуске",
     onExit: "При выходе",
-    processesHint: "Имена процессов через запятую, напр. process.exe",
+    ruleEnabled: "Включено",
+    deleteRule: "Удалить",
+    processesHint: "Имена процессов через запятую для каждого правила, напр. process.exe",
     config: "Конфиг",
     configHint: 'Импорт / экспорт полного <span class="mono">config.json</span> (пресеты, хоткеи, автоматизация).',
     import: "Импорт…",
@@ -108,6 +122,7 @@ const state = {
   liveTimer: null,
   ready: false,
   lang: "en",
+  ruleSeq: 0,
 };
 
 function t(key, vars) {
@@ -427,6 +442,252 @@ function bindCombo(el) {
   });
 }
 
+function newRuleId() {
+  state.ruleSeq += 1;
+  return `rule_${Date.now()}_${state.ruleSeq}`;
+}
+
+function parseProcessNames(raw) {
+  return String(raw || "")
+    .replace(/;/g, ",")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+function makeComboEl(id, labelledBy) {
+  const combo = document.createElement("div");
+  combo.className = "combo";
+  combo.id = id;
+  combo.setAttribute("role", "combobox");
+  if (labelledBy) combo.setAttribute("aria-labelledby", labelledBy);
+  combo.setAttribute("aria-expanded", "false");
+  combo.setAttribute("aria-haspopup", "listbox");
+  combo.tabIndex = 0;
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "combo-trigger";
+  trigger.tabIndex = -1;
+  const value = document.createElement("span");
+  value.className = "combo-value";
+  trigger.appendChild(value);
+
+  const menu = document.createElement("div");
+  menu.className = "combo-menu";
+  menu.setAttribute("role", "listbox");
+  menu.hidden = true;
+
+  combo.appendChild(trigger);
+  combo.appendChild(menu);
+  return combo;
+}
+
+function cleanupRuleComboMenus(container) {
+  container?.querySelectorAll(".combo").forEach((el) => {
+    const menu = getComboMenu(el);
+    if (menu) {
+      menu.remove();
+      el._comboMenu = null;
+    }
+  });
+  document.querySelectorAll(".combo-menu[data-owner^='rule-']").forEach((menu) => {
+    const ownerId = menu.dataset.owner;
+    if (!ownerId || !document.getElementById(ownerId)) menu.remove();
+  });
+}
+
+function localizeSubtree(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.getAttribute("data-i18n"));
+  });
+  root.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    el.setAttribute("placeholder", t(el.getAttribute("data-i18n-placeholder")));
+  });
+}
+
+function collectRulesFromDom() {
+  const rules = [];
+  const container = $("watch-rules");
+  if (!container) return rules;
+  container.querySelectorAll(".watch-rule").forEach((card) => {
+    const processNames = parseProcessNames(card.querySelector(".rule-processes")?.value);
+    const nameVal = (card.querySelector(".rule-name")?.value || "").trim();
+    rules.push({
+      id: card.dataset.ruleId || newRuleId(),
+      name: nameVal || processNames[0] || "App",
+      enabled: !!card.querySelector(".rule-enabled")?.checked,
+      process_names: processNames,
+      on_start: comboValue(card.querySelector(".rule-on-start")) || "Default",
+      on_exit: comboValue(card.querySelector(".rule-on-exit")) || "Default",
+    });
+  });
+  return rules;
+}
+
+function createRuleCard(rule, presetNames) {
+  const rid = rule.id || newRuleId();
+  const uid = rid.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const card = document.createElement("div");
+  card.className = "watch-rule";
+  card.dataset.ruleId = rid;
+
+  const head = document.createElement("div");
+  head.className = "watch-rule-head";
+
+  const enabledLabel = document.createElement("label");
+  enabledLabel.className = "switch-row watch-rule-enabled";
+  const enabledText = document.createElement("span");
+  enabledText.setAttribute("data-i18n", "ruleEnabled");
+  enabledText.textContent = t("ruleEnabled");
+  const enabledInput = document.createElement("input");
+  enabledInput.type = "checkbox";
+  enabledInput.setAttribute("role", "switch");
+  enabledInput.className = "rule-enabled";
+  enabledInput.checked = rule.enabled !== false;
+  enabledInput.addEventListener("change", saveOptions);
+  enabledLabel.appendChild(enabledText);
+  enabledLabel.appendChild(enabledInput);
+
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "btn btn-rule-delete";
+  delBtn.setAttribute("data-i18n", "deleteRule");
+  delBtn.textContent = t("deleteRule");
+  delBtn.addEventListener("click", () => {
+    closeAllCombos();
+    const startCombo = card.querySelector(".rule-on-start");
+    const exitCombo = card.querySelector(".rule-on-exit");
+    for (const el of [startCombo, exitCombo]) {
+      const menu = getComboMenu(el);
+      if (menu) menu.remove();
+      if (el) el._comboMenu = null;
+    }
+    card.remove();
+    saveOptions();
+  });
+
+  head.appendChild(enabledLabel);
+  head.appendChild(delBtn);
+  card.appendChild(head);
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "row tight";
+  const nameLabel = document.createElement("label");
+  nameLabel.setAttribute("data-i18n", "ruleName");
+  nameLabel.textContent = t("ruleName");
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "rule-name";
+  nameInput.autocomplete = "off";
+  nameInput.value = rule.name || "";
+  nameInput.addEventListener("change", saveOptions);
+  nameInput.addEventListener("blur", saveOptions);
+  nameRow.appendChild(nameLabel);
+  nameRow.appendChild(nameInput);
+  card.appendChild(nameRow);
+
+  const procsRow = document.createElement("div");
+  procsRow.className = "row";
+  const procsLabel = document.createElement("label");
+  procsLabel.setAttribute("data-i18n", "ruleProcesses");
+  procsLabel.textContent = t("ruleProcesses");
+  const procsInput = document.createElement("input");
+  procsInput.type = "text";
+  procsInput.className = "rule-processes";
+  procsInput.autocomplete = "off";
+  procsInput.setAttribute("data-i18n-placeholder", "processesPlaceholder");
+  procsInput.placeholder = t("processesPlaceholder");
+  procsInput.value = (rule.process_names || []).join(", ");
+  procsInput.addEventListener("change", saveOptions);
+  procsInput.addEventListener("blur", saveOptions);
+  procsRow.appendChild(procsLabel);
+  procsRow.appendChild(procsInput);
+  card.appendChild(procsRow);
+
+  const startId = `rule-on-start-${uid}`;
+  const startLabelId = `${startId}-label`;
+  const startRow = document.createElement("div");
+  startRow.className = "row";
+  const startLabel = document.createElement("label");
+  startLabel.id = startLabelId;
+  startLabel.setAttribute("data-i18n", "onStart");
+  startLabel.textContent = t("onStart");
+  const startCombo = makeComboEl(startId, startLabelId);
+  startCombo.classList.add("rule-on-start");
+  startRow.appendChild(startLabel);
+  startRow.appendChild(startCombo);
+  card.appendChild(startRow);
+
+  const exitId = `rule-on-exit-${uid}`;
+  const exitLabelId = `${exitId}-label`;
+  const exitRow = document.createElement("div");
+  exitRow.className = "row";
+  const exitLabel = document.createElement("label");
+  exitLabel.id = exitLabelId;
+  exitLabel.setAttribute("data-i18n", "onExit");
+  exitLabel.textContent = t("onExit");
+  const exitCombo = makeComboEl(exitId, exitLabelId);
+  exitCombo.classList.add("rule-on-exit");
+  exitRow.appendChild(exitLabel);
+  exitRow.appendChild(exitCombo);
+  card.appendChild(exitRow);
+
+  bindCombo(startCombo);
+  bindCombo(exitCombo);
+  fillSelect(startCombo, presetNames, rule.on_start || "Default");
+  fillSelect(exitCombo, presetNames, rule.on_exit || "Default");
+  startCombo.addEventListener("change", saveOptions);
+  exitCombo.addEventListener("change", saveOptions);
+
+  return card;
+}
+
+function renderWatchRules(rules) {
+  const container = $("watch-rules");
+  if (!container) return;
+  closeAllCombos();
+  cleanupRuleComboMenus(container);
+  container.innerHTML = "";
+  const presetNames = Object.keys(state.presets);
+  const list = Array.isArray(rules) ? rules : [];
+  for (const rule of list) {
+    if (!rule || typeof rule !== "object") continue;
+    container.appendChild(createRuleCard(rule, presetNames));
+  }
+  localizeSubtree(container);
+  requestAnimationFrame(() => {
+    syncI18nButtonMinWidths();
+    syncLabelColumnWidth();
+  });
+}
+
+function addWatchRule() {
+  const container = $("watch-rules");
+  if (!container) return;
+  const presetNames = Object.keys(state.presets);
+  const card = createRuleCard(
+    {
+      id: newRuleId(),
+      name: "",
+      enabled: true,
+      process_names: [],
+      on_start: "Default",
+      on_exit: "Default",
+    },
+    presetNames
+  );
+  container.appendChild(card);
+  localizeSubtree(card);
+  card.querySelector(".rule-name")?.focus();
+  requestAnimationFrame(() => {
+    syncI18nButtonMinWidths();
+    syncLabelColumnWidth();
+  });
+  saveOptions();
+}
+
 function renderPresets() {
   const list = $("preset-list");
   list.innerHTML = "";
@@ -544,14 +805,7 @@ async function savePreset() {
 }
 
 async function newPreset() {
-  const res = await apiCall(
-    "new_preset",
-    Number($("brightness").value),
-    Number($("contrast").value),
-    Number($("gamma").value),
-    Math.round(Number($("vibrance").value)),
-    Math.round(Number($("hue").value))
-  );
+  const res = await apiCall("new_preset", 0.5, 0.5, 1.0, 50, 0);
   if (res && res.error) {
     setStatus(t("errorPrefix") + res.error);
     return;
@@ -577,9 +831,7 @@ async function saveOptions() {
   const res = await apiCall("save_options", {
     watch_enabled: $("watch-enabled").checked,
     all_displays: $("all-displays").checked,
-    processes: $("processes").value,
-    on_start: comboValue($("on-start")),
-    on_exit: comboValue($("on-exit")),
+    rules: collectRulesFromDom(),
   });
   if (res && res.error) setStatus(t("errorPrefix") + res.error);
   else setStatus(t("automationSaved"));
@@ -739,13 +991,9 @@ function applyState(payload) {
     }
   }
 
-  const names = Object.keys(state.presets);
-  fillSelect($("on-start"), names, payload.watch?.preset || "Default");
-  fillSelect($("on-exit"), names, payload.watch?.on_exit_preset || "Default");
-
   $("watch-enabled").checked = !!payload.watch?.enabled;
   $("all-displays").checked = !!payload.apply_all_displays;
-  $("processes").value = (payload.watch?.process_names || []).join(", ");
+  renderWatchRules(payload.watch?.rules || []);
 
   renderPresets();
   if (state.selected in state.presets) loadPresetFields(state.selected);
@@ -789,21 +1037,17 @@ function bind() {
   $("btn-capture").addEventListener("click", toggleCapture);
   $("btn-import").addEventListener("click", importConfig);
   $("btn-export").addEventListener("click", exportConfig);
+  $("btn-add-rule").addEventListener("click", addWatchRule);
   $("lang-en").addEventListener("click", () => setLanguage("en"));
   $("lang-ru").addEventListener("click", () => setLanguage("ru"));
-
-  bindCombo($("on-start"));
-  bindCombo($("on-exit"));
 
   for (const id of ["brightness", "contrast", "gamma", "vibrance", "hue"]) {
     $(id).addEventListener("input", scheduleLive);
   }
 
-  for (const id of ["watch-enabled", "all-displays", "on-start", "on-exit"]) {
+  for (const id of ["watch-enabled", "all-displays"]) {
     $(id).addEventListener("change", saveOptions);
   }
-  $("processes").addEventListener("change", saveOptions);
-  $("processes").addEventListener("blur", saveOptions);
 
   document.addEventListener("click", (e) => {
     if (e.target.closest(".combo") || e.target.closest(".combo-menu")) return;

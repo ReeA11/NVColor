@@ -8,6 +8,10 @@
   Создание и настройка цветовых профилей для Windows: яркость, контраст, гамма, Digital Vibrance и Hue
 </p>
 
+<p align="center">
+  <img src="assets/demo.png" alt="NVColor" width="640">
+</p>
+
 ## Скачать
 
 Готовый **`NVColor.exe`** — в [Releases](../../releases)
