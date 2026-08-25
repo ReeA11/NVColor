@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/nvcolor.png" alt="NVColor" width="128" height="128">
+  <img src="nvcolor/assets/nvcolor.png" alt="NVColor" width="128" height="128">
 </p>
 
 <h1 align="center">NVColor</h1>
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/demo.png" alt="NVColor" width="640">
+  <img src="nvcolor/assets/demo.png" alt="NVColor" width="640">
 </p>
 
 ## Скачать
@@ -30,7 +30,7 @@
 - Импорт / экспорт конфига
 - Сброс настроек при выходе из программы
 
-Пример схемы конфига: [`config.example.json`](config.example.json).
+Пример схемы конфига: [`config/example.json`](config/example.json).
 
 ## Требования
 

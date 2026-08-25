@@ -8,30 +8,39 @@
 </head>
 <body>
   <div class="app">
-    <header class="header">
+    <aside class="nav" aria-label="Presets">
       <div class="brand">
         <img class="brand-logo" src="nvcolor.png" alt="" width="56" height="56" />
         <div class="header-text">
-          <h1>NVColor</h1>
+          <div class="brand-name">NVColor</div>
           <p class="subtitle" data-i18n="subtitle">Color presets for desktop &amp; games</p>
         </div>
       </div>
-      <div class="lang-switch" role="group" aria-label="Language">
-        <button type="button" class="lang-btn active" data-lang="en" id="lang-en" title="English">EN</button>
-        <button type="button" class="lang-btn" data-lang="ru" id="lang-ru" title="Русский">RU</button>
-      </div>
-    </header>
-
-    <div class="shell">
-      <aside class="nav">
-        <div class="nav-label" data-i18n="presetsNav">Presets</div>
-        <div id="preset-list" class="preset-list" role="listbox"></div>
+      <div class="nav-label" data-i18n="presetsNav">Presets</div>
+      <div id="preset-list" class="preset-list" role="listbox"></div>
+      <div class="nav-footer">
         <div class="nav-actions">
           <button type="button" class="btn" id="btn-new" data-i18n="new">New</button>
-          <button type="button" class="btn" id="btn-delete" data-i18n="delete">Delete</button>
+          <button type="button" class="btn btn-destructive" id="btn-delete" data-i18n="delete">Delete</button>
           <button type="button" class="btn btn-accent" id="btn-apply" data-i18n="apply">Apply</button>
         </div>
-      </aside>
+      </div>
+    </aside>
+
+    <div class="pane">
+      <header class="pane-header">
+        <div class="pane-heading">
+          <div class="pane-title-row">
+            <h1 id="content-title">NVColor</h1>
+            <span class="badge" id="current-badge" hidden data-i18n="active">Active</span>
+          </div>
+          <p class="pane-sub" id="content-hotkey" hidden></p>
+        </div>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" class="lang-btn active" data-lang="en" id="lang-en" title="English">EN</button>
+          <button type="button" class="lang-btn" data-lang="ru" id="lang-ru" title="Русский">RU</button>
+        </div>
+      </header>
 
       <main class="content">
         <div class="panel-group">
@@ -112,10 +121,10 @@
 
           <section class="card">
             <h2 data-i18n="config">Config</h2>
-            <p class="hint" style="margin-top:0;margin-bottom:12px" data-i18n-html="configHint">
+            <p class="hint" data-i18n-html="configHint">
               Import / export full <span class="mono">config.json</span> (presets, hotkeys, automation).
             </p>
-            <div class="actions" style="margin-top:0">
+            <div class="actions">
               <button type="button" class="btn" id="btn-import" data-i18n="import">Import…</button>
               <button type="button" class="btn btn-accent" id="btn-export" data-i18n="export">Export…</button>
             </div>
@@ -124,6 +133,21 @@
       </main>
     </div>
   </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <div class="sheet-root" id="sheet-root" hidden>
+    <div class="sheet-scrim" id="sheet-scrim"></div>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-describedby="sheet-message">
+      <h2 id="sheet-title"></h2>
+      <p id="sheet-message"></p>
+      <div class="sheet-actions">
+        <button type="button" class="sheet-btn" id="sheet-cancel"></button>
+        <button type="button" class="sheet-btn sheet-btn-destructive" id="sheet-confirm"></button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

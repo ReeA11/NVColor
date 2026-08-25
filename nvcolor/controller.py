@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from config_store import (
+from .config_store import (
     config_path,
     load_config,
     normalize_watch_rule,
@@ -15,11 +15,11 @@ from config_store import (
     save_config,
     write_config_file,
 )
-from gamma_control import ColorPreset, apply_preset
-from gamma_control import hard_reset as apply_hard_reset
-from hotkeys import HotkeyListener, format_hotkey, parse_hotkey
-from nvapi_color import apply_nv_color, clamp_hue, clamp_vibrance, reset_nv_color
-from process_watch import ProcessWatcher
+from .gamma_control import ColorPreset, apply_preset
+from .gamma_control import hard_reset as apply_hard_reset
+from .hotkeys import HotkeyListener, format_hotkey, parse_hotkey
+from .nvapi_color import apply_nv_color, clamp_hue, clamp_vibrance, reset_nv_color
+from .process_watch import ProcessWatcher
 
 
 def _preset_values(raw: dict[str, Any] | None = None) -> dict[str, float | int]:
