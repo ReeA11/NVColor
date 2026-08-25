@@ -1,4 +1,4 @@
-"""Fluent dark tray context menu (compact WebView2 popup)."""
+"""Dark tray context menu (compact WebView2 popup)."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Any, Callable
 import webview
 
 if TYPE_CHECKING:
-    from controller import AppController
+    from .controller import AppController
 
-MENU_WIDTH = 200
+MENU_WIDTH = 220
 
 user32 = ctypes.windll.user32
 
@@ -286,7 +286,7 @@ def create_tray_menu_window(
         focus=True,
         shadow=True,
         resizable=False,
-        background_color="#2c2c2c",
+        background_color="#1c1c1e",
         text_select=False,
         confirm_close=False,
         hidden=True,

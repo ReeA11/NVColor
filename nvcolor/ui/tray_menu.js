@@ -66,7 +66,7 @@ function render(state) {
 
     const check = document.createElement("span");
     check.className = "check";
-    check.textContent = name === state.current ? "●" : "";
+    check.textContent = name === state.current ? "✓" : "";
 
     const label = document.createElement("span");
     label.className = "label";

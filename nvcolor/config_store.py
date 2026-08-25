@@ -42,7 +42,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
 def app_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+    # Development: repository root (parent of this package)
+    return Path(__file__).resolve().parent.parent
 
 
 def config_path() -> Path:
@@ -228,7 +229,7 @@ def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
 
     hotkeys = data.get("hotkeys")
     if isinstance(hotkeys, dict):
-        from hotkeys import format_hotkey
+        from .hotkeys import format_hotkey
 
         cleaned_hk: dict[str, str] = {}
         for k, v in hotkeys.items():

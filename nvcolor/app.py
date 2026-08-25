@@ -2,7 +2,7 @@
 NVColor — WebView2 settings UI + system tray.
 
 System layer stays Python (gamma, hotkeys, watcher, config).
-Settings window is Fluent HTML in Edge WebView2 via pywebview.
+Settings window is HTML in Edge WebView2 via pywebview.
 pystray.run() on a worker thread; webview.start() owns the main thread.
 """
 
@@ -16,12 +16,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from config_store import app_dir, config_path
-from controller import AppController
-from gamma_control import hard_reset as apply_hard_reset
-from nvapi_color import reset_nv_color
-from settings_webview import SettingsApi, create_settings_window, resource_dir
-from tray_menu import TrayMenuApi, create_tray_menu_window
+from .config_store import app_dir, config_path
+from .controller import AppController
+from .gamma_control import hard_reset as apply_hard_reset
+from .nvapi_color import reset_nv_color
+from .settings_webview import SettingsApi, create_settings_window, resource_dir
+from .tray_menu import TrayMenuApi, create_tray_menu_window
 
 try:
     import pystray
@@ -84,7 +84,7 @@ def make_icon() -> Image.Image:
 
 
 class FluentTrayIcon(pystray.Icon):
-    """pystray icon that opens a custom Fluent menu on right-click."""
+    """pystray icon that opens a custom menu on right-click."""
 
     def __init__(self, *args, on_left=None, on_right=None, **kwargs):
         self._on_left = on_left

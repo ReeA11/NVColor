@@ -1,4 +1,4 @@
-"""Settings window — WebView2 Fluent UI bridged to AppController."""
+"""Settings window — WebView2 UI bridged to AppController."""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import webview
 
-from hotkeys import format_hotkey
+from .hotkeys import format_hotkey
 
 if TYPE_CHECKING:
-    from controller import AppController
+    from .controller import AppController
 
 
 def resource_dir() -> Path:
-    """Bundled resources root (PyInstaller MEIPASS) or project root."""
+    """Bundled resources root (PyInstaller MEIPASS) or the nvcolor package dir."""
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS)  # type: ignore[attr-defined]
     return Path(__file__).resolve().parent
@@ -182,7 +182,7 @@ class SettingsApi:
         hue: int = 0,
     ) -> dict[str, Any]:
         try:
-            from config_store import DEFAULT_PRESET
+            from .config_store import DEFAULT_PRESET
 
             base = "Preset"
             i = 1
@@ -248,7 +248,7 @@ class SettingsApi:
         if window is None:
             return self._err(RuntimeError("Window not ready"))
         try:
-            from config_store import app_dir
+            from .config_store import app_dir
 
             result = window.create_file_dialog(
                 webview.FileDialog.SAVE,
@@ -271,7 +271,7 @@ class SettingsApi:
         if window is None:
             return self._err(RuntimeError("Window not ready"))
         try:
-            from config_store import app_dir
+            from .config_store import app_dir
 
             result = window.create_file_dialog(
                 webview.FileDialog.OPEN,
@@ -451,7 +451,7 @@ def create_settings_window(
         width=WINDOW_WIDTH,
         height=WINDOW_HEIGHT,
         min_size=(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT),
-        background_color="#1c1c1c",
+        background_color="#1c1c1e",
         text_select=False,
         confirm_close=False,
         hidden=hidden,

@@ -54,6 +54,7 @@ desktop.ini
 
 # Large / intermediate generated assets (keep nvcolor.png + nvcolor.ico)
 assets/*-app-icon.png
+**/nvcolor-app-icon.png
 assets/reeall-*.png
 
 # OS junk

@@ -1,4 +1,4 @@
-/* NVColor — Fluent settings frontend */
+/* NVColor — settings frontend (Apple-style motion & materials) */
 
 const $ = (id) => document.getElementById(id);
 
@@ -56,6 +56,11 @@ const I18N = {
     loadError: "Error loading presets",
     noPresets: "No presets in config",
     errorPrefix: "Error: ",
+    active: "Active",
+    cancel: "Cancel",
+    deleteTitle: "Delete preset?",
+    deleteBody: "“{name}” will be removed from the config.",
+    deleteConfirm: "Delete",
   },
   ru: {
     subtitle: "Цветовые пресеты для рабочего стола и игр",
@@ -110,6 +115,11 @@ const I18N = {
     loadError: "Ошибка загрузки пресетов",
     noPresets: "В конфиге нет пресетов",
     errorPrefix: "Ошибка: ",
+    active: "Активен",
+    cancel: "Отмена",
+    deleteTitle: "Удалить пресет?",
+    deleteBody: "«{name}» будет удалён из конфига.",
+    deleteConfirm: "Удалить",
   },
 };
 
@@ -119,7 +129,8 @@ const state = {
   presets: {},
   hotkeys: {},
   capturing: false,
-  liveTimer: null,
+  liveBusy: false,
+  livePending: false,
   ready: false,
   lang: "en",
   ruleSeq: 0,
@@ -134,6 +145,180 @@ function t(key, vars) {
     }
   }
   return text;
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Apple-style spring: damping 1.0 by default, bounce only when requested. */
+function animateSpring({ from, to, velocity = 0, response = 0.35, bounce = 0, onUpdate, onComplete }) {
+  if (prefersReducedMotion()) {
+    onUpdate(to);
+    if (onComplete) onComplete();
+    return () => {};
+  }
+  const zeta = bounce > 0 ? Math.max(0.55, 1 - bounce) : 1;
+  const omega = (2 * Math.PI) / Math.max(0.12, response);
+  let x = from;
+  let v = velocity;
+  let last = performance.now();
+  let raf = 0;
+  const step = (now) => {
+    const dt = Math.min(0.032, (now - last) / 1000);
+    last = now;
+    const accel = -omega * omega * (x - to) - 2 * zeta * omega * v;
+    v += accel * dt;
+    x += v * dt;
+    onUpdate(x);
+    if (Math.abs(x - to) < 0.04 && Math.abs(v) < 0.5) {
+      onUpdate(to);
+      if (onComplete) onComplete();
+      return;
+    }
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(raf);
+}
+
+const toastAnim = { p: 0, stop: null, hideTimer: null };
+
+function applyToastProgress(p) {
+  const el = $("toast");
+  if (!el) return;
+  toastAnim.p = p;
+  el.style.opacity = String(p);
+  el.style.transform = `translateX(-50%) translateY(${(1 - p) * 16}px)`;
+}
+
+function hideToast() {
+  if (toastAnim.hideTimer) {
+    clearTimeout(toastAnim.hideTimer);
+    toastAnim.hideTimer = null;
+  }
+  if (toastAnim.stop) toastAnim.stop();
+  toastAnim.stop = animateSpring({
+    from: toastAnim.p,
+    to: 0,
+    response: 0.3,
+    bounce: 0,
+    onUpdate: applyToastProgress,
+    onComplete: () => $("toast")?.classList.remove("show"),
+  });
+}
+
+function showToast(text) {
+  const el = $("toast");
+  if (!el || !text) return;
+  el.textContent = text;
+  el.classList.add("show");
+  if (toastAnim.stop) toastAnim.stop();
+  if (toastAnim.hideTimer) clearTimeout(toastAnim.hideTimer);
+  toastAnim.stop = animateSpring({
+    from: toastAnim.p,
+    to: 1,
+    response: 0.35,
+    bounce: 0,
+    onUpdate: applyToastProgress,
+  });
+  toastAnim.hideTimer = setTimeout(hideToast, 2200);
+}
+
+function confirmSheet({ title, message, confirmLabel }) {
+  const root = $("sheet-root");
+  const sheet = $("sheet");
+  const scrim = $("sheet-scrim");
+  if (!root || !sheet) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    $("sheet-title").textContent = title;
+    $("sheet-message").textContent = message;
+    $("sheet-confirm").textContent = confirmLabel;
+    $("sheet-cancel").textContent = t("cancel");
+    root.hidden = false;
+
+    let p = 0;
+    let stop = null;
+    let done = false;
+
+    const apply = (v) => {
+      p = v;
+      if (scrim) scrim.style.opacity = String(v);
+      sheet.style.opacity = String(v);
+      sheet.style.transform = `scale(${0.96 + 0.04 * v})`;
+    };
+
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      document.removeEventListener("keydown", onKey, true);
+      if (stop) stop();
+      stop = animateSpring({
+        from: p,
+        to: 0,
+        response: 0.3,
+        bounce: 0,
+        onUpdate: apply,
+        onComplete: () => {
+          root.hidden = true;
+          resolve(result);
+        },
+      });
+    };
+
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    };
+
+    document.addEventListener("keydown", onKey, true);
+    $("sheet-confirm").onclick = () => finish(true);
+    $("sheet-cancel").onclick = () => finish(false);
+    if (scrim) scrim.onclick = () => finish(false);
+
+    apply(0);
+    stop = animateSpring({
+      from: 0,
+      to: 1,
+      response: 0.35,
+      bounce: 0,
+      onUpdate: apply,
+    });
+  });
+}
+
+function paintSlider(el) {
+  if (!el) return;
+  const min = Number(el.min);
+  const max = Number(el.max);
+  const val = Number(el.value);
+  const pct = max === min ? 0 : ((val - min) / (max - min)) * 100;
+  el.style.backgroundImage = `linear-gradient(to right, var(--accent) ${pct}%, var(--track) ${pct}%)`;
+  el.style.backgroundSize = "100% 4px";
+  el.style.backgroundRepeat = "no-repeat";
+  el.style.backgroundPosition = "center";
+}
+
+function paintAllSliders() {
+  for (const id of ["brightness", "contrast", "gamma", "vibrance", "hue"]) {
+    paintSlider($(id));
+  }
+}
+
+function updatePaneHeader(name) {
+  const title = $("content-title");
+  if (title) title.textContent = name || "NVColor";
+  const badge = $("current-badge");
+  if (badge) badge.hidden = !name || name !== state.current;
+  const sub = $("content-hotkey");
+  if (sub) {
+    const hk = formatHotkey(state.hotkeys[name] || "");
+    sub.textContent = hk;
+    sub.hidden = !hk;
+  }
 }
 
 function syncNavLayout() {
@@ -255,6 +440,8 @@ function applyLocale() {
     syncI18nButtonMinWidths();
     syncLabelColumnWidth();
     syncNavLayout();
+    paintAllSliders();
+    updatePaneHeader(state.selected);
   });
 }
 
@@ -270,8 +457,9 @@ async function setLanguage(lang) {
   }
 }
 
-function setStatus(_text) {
-  /* Status strip removed from UI */
+function setStatus(text) {
+  if (!text) return;
+  showToast(text);
 }
 
 function fmt(n) {
@@ -331,17 +519,32 @@ function closeCombo(el) {
   el.classList.remove("open");
   el.setAttribute("aria-expanded", "false");
   const menu = getComboMenu(el);
-  if (menu) {
+  if (!menu) return;
+
+  const finish = () => {
+    if (el.classList.contains("open")) return;
     menu.hidden = true;
+    menu.classList.remove("visible");
     menu.style.top = "";
     menu.style.left = "";
     menu.style.width = "";
     menu.style.maxHeight = "";
-    // Keep menu on body so it stays above backdrop-filter cards
     if (menu.parentElement !== document.body) {
       document.body.appendChild(menu);
     }
+  };
+
+  menu.classList.remove("visible");
+  if (prefersReducedMotion() || menu.hidden) {
+    finish();
+    return;
   }
+  const onEnd = (e) => {
+    if (e.target !== menu) return;
+    menu.removeEventListener("transitionend", onEnd);
+    finish();
+  };
+  menu.addEventListener("transitionend", onEnd);
 }
 
 function closeAllCombos(except) {
@@ -372,8 +575,12 @@ function placeComboMenu(el) {
   if (openUp) {
     const h = Math.min(menu.scrollHeight || height, height);
     menu.style.top = `${Math.round(rect.top - gap - h)}px`;
+    menu.dataset.dir = "up";
+    menu.style.transformOrigin = "bottom center";
   } else {
     menu.style.top = `${Math.round(rect.bottom + gap)}px`;
+    menu.dataset.dir = "down";
+    menu.style.transformOrigin = "top center";
   }
 }
 
@@ -388,8 +595,12 @@ function openCombo(el) {
     document.body.appendChild(menu);
   }
   menu.hidden = false;
+  menu.classList.remove("visible");
   placeComboMenu(el);
-  requestAnimationFrame(() => placeComboMenu(el));
+  requestAnimationFrame(() => {
+    placeComboMenu(el);
+    menu.classList.add("visible");
+  });
 }
 
 function fillSelect(el, names, value) {
@@ -736,6 +947,7 @@ function loadPresetFields(name) {
   $("vibrance").value = raw.vibrance ?? 50;
   $("hue").value = raw.hue ?? 0;
   updateSliderLabels();
+  updatePaneHeader(name);
 }
 
 function updateSliderLabels() {
@@ -744,6 +956,7 @@ function updateSliderLabels() {
   $("gamma-val").textContent = fmt($("gamma").value);
   $("vibrance-val").textContent = String(Math.round(Number($("vibrance").value)));
   $("hue-val").textContent = String(Math.round(Number($("hue").value)));
+  paintAllSliders();
 }
 
 async function selectPreset(name) {
@@ -763,24 +976,41 @@ async function applySelected(name) {
   if (!target) return;
   const res = await apiCall("apply", target);
   if (res && res.error) setStatus(t("errorPrefix") + res.error);
-  else setStatus(t("applied", { name: target }));
+  else {
+    state.current = target;
+    renderPresets();
+    updatePaneHeader(state.selected);
+    setStatus(t("applied", { name: target }));
+  }
 }
 
 function scheduleLive() {
   updateSliderLabels();
-  if (state.liveTimer) clearTimeout(state.liveTimer);
-  state.liveTimer = setTimeout(async () => {
-    state.liveTimer = null;
-    await apiCall(
-      "live",
-      Number($("brightness").value),
-      Number($("contrast").value),
-      Number($("gamma").value),
-      Math.round(Number($("vibrance").value)),
-      Math.round(Number($("hue").value))
-    );
-    setStatus(t("livePreview"));
-  }, 40);
+  flushLive();
+}
+
+async function flushLive() {
+  if (state.liveBusy) {
+    state.livePending = true;
+    return;
+  }
+  state.liveBusy = true;
+  try {
+    do {
+      state.livePending = false;
+      await apiCall(
+        "live",
+        Number($("brightness").value),
+        Number($("contrast").value),
+        Number($("gamma").value),
+        Math.round(Number($("vibrance").value)),
+        Math.round(Number($("hue").value))
+      );
+    } while (state.livePending);
+  } finally {
+    state.liveBusy = false;
+    if (state.livePending) flushLive();
+  }
 }
 
 async function savePreset() {
@@ -817,6 +1047,12 @@ async function newPreset() {
 
 async function deletePreset() {
   if (!state.selected) return;
+  const ok = await confirmSheet({
+    title: t("deleteTitle"),
+    message: t("deleteBody", { name: state.selected }),
+    confirmLabel: t("deleteConfirm"),
+  });
+  if (!ok) return;
   const res = await apiCall("delete_preset", state.selected);
   if (res && res.error) {
     setStatus(t("errorPrefix") + res.error);
